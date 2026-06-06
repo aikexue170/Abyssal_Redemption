@@ -7,14 +7,14 @@ import org.lwjgl.util.vector.Vector2f;
 
 import java.awt.*;
 
-public class ARR_AfterImageUtil {
+public class ARR_GhostUtil {
 
-    public static void AddStaticAfterImage(ShipAPI ship, Color color, float in, float dur, float out,
-                                           boolean additive, boolean combineColor, boolean aboveShip) {
+    public static void AddStaticGhost(ShipAPI ship, Color color, float in, float dur, float out,
+                                      boolean additive, boolean combineColor, boolean aboveShip) {
 
         // 检查 ship 是否为 null
         if (ship == null) {
-            System.err.println("Error: Ship is null in PRI_addAfterImage");
+            System.err.println("Error: Ship is null when generating ghost");
             return;
         }
 
@@ -77,8 +77,8 @@ public class ARR_AfterImageUtil {
         }
     }
 
-    public static void AddFluentAfterImage(ShipAPI ship, Color color, float in, float dur, float out,
-                                            boolean additive, boolean combineColor, boolean aboveShip) {
+    public static void AddFluentGhost(ShipAPI ship, Color color, float in, float dur, float out,
+                                      boolean additive, boolean combineColor, boolean aboveShip) {
 
         // 检查 ship 是否为 null
         if (ship == null) {
@@ -108,11 +108,11 @@ public class ARR_AfterImageUtil {
         Vector2f normalizedVelocity = velocity.normalise(null);
 
         // 计算拖尾片段的运动方向（速度的反方向）
-        Vector2f afterimageDirection = new Vector2f(normalizedVelocity);
-        afterimageDirection.negate(); // 反向
+        Vector2f ghostDirection = new Vector2f(normalizedVelocity);
+        ghostDirection.negate(); // 反向
 
         // 计算拖尾片段的运动速度（可以根据需要调整）
-        float afterimageSpeed = speed * 1.5f; // 拖尾片段的速度为飞船速度的 150%
+        float ghostSpeed = speed * 1.5f; // 拖尾片段的速度为飞船速度的 150%
 
         // 检查是否满足生成拖尾的条件
         if (timer.isTargetReached(engine, 0.1f)) {
@@ -123,8 +123,8 @@ public class ARR_AfterImageUtil {
                         color, // 拖尾的颜色
                         0, // 拖尾的 x 坐标偏移
                         0, // 拖尾的 y 坐标偏移
-                        afterimageDirection.x * afterimageSpeed, // 拖尾的 x 方向速度
-                        afterimageDirection.y * afterimageSpeed, // 拖尾的 y 方向速度
+                        ghostDirection.x * ghostSpeed, // 拖尾的 x 方向速度
+                        ghostDirection.y * ghostSpeed, // 拖尾的 y 方向速度
                         0.1f * i, // 逐渐增加透明度
                         in, // 拖尾的淡入时间
                         dur, // 拖尾的持续时间

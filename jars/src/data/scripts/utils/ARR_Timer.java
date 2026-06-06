@@ -4,7 +4,6 @@ import com.fs.starfarer.api.combat.CombatEngineAPI;
 
 public class ARR_Timer {
 
-    private float frameTime;
     private float totalTime;
 
     public ARR_Timer() {
@@ -14,7 +13,7 @@ public class ARR_Timer {
     // 无属性计时器
     public float timer(CombatEngineAPI engine) {
         synchronized (this) {
-            frameTime = engine.getElapsedInLastFrame();
+            float frameTime = engine.getElapsedInLastFrame();
             totalTime += frameTime;
             return totalTime;
         }

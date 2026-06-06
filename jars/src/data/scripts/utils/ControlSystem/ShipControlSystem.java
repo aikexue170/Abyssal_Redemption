@@ -17,13 +17,13 @@ public class ShipControlSystem {
     ARR_Timer timer;
     CombatEngineAPI engine = Global.getCombatEngine();
 
-    private final float ACCELERATION = 500f;
-    private final float TURN_ACCELERATION = 20f;
-    private final float STRAFE_ACCELERATION = 300f;
-    private final float MAX_FORWARD_SPEED = 40f ;
-    private final float MAX_BACKWARD_SPEED = 20f;
-    private final float MAX_TURN_SPEED = 20f;
-    private final float MAX_STRAFE_SPEED = 15f;
+    private final float ACCELERATION;
+    private final float TURN_ACCELERATION;
+    private final float STRAFE_ACCELERATION;
+    private final float MAX_FORWARD_SPEED;
+    private final float MAX_BACKWARD_SPEED;
+    private final float MAX_TURN_SPEED;
+    private final float MAX_STRAFE_SPEED;
 
     public ShipControlSystem(ShipAPI ship, float amount){
         this.ship = ship;
@@ -31,6 +31,13 @@ public class ShipControlSystem {
         ship.getCustomData().put("shipControlSystem", this);
         this.amount = amount;
         timer = new ARR_Timer();
+        MAX_STRAFE_SPEED = 15f;
+        MAX_TURN_SPEED = 20f;
+        MAX_BACKWARD_SPEED = 20f;
+        MAX_FORWARD_SPEED = 40f;
+        STRAFE_ACCELERATION = 300f;
+        TURN_ACCELERATION = 20f;
+        ACCELERATION = 500f;
     }
 
     // 获取舰船控制器的静态方法

@@ -62,8 +62,7 @@ public class ARR_DeflectionFieldUtil {
     private float calculateForceMagnitude(float distance) {
         float maxForce = 50f;
         float minForce = 15f;
-        float force = maxForce * (minForce / (distance + minForce));
-        return force;
+        return maxForce * (minForce / (distance + minForce));
     }
 
     // 计算相对位置向量

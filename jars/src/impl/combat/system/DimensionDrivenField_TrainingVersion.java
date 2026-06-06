@@ -1,18 +1,15 @@
 package impl.combat.system;
 
+import com.fs.starfarer.api.combat.CollisionClass;
 import com.fs.starfarer.api.Global;
 import com.fs.starfarer.api.combat.CombatEngineAPI;
-import com.fs.starfarer.api.combat.CombatEntityAPI;
 import com.fs.starfarer.api.combat.MutableShipStatsAPI;
 import com.fs.starfarer.api.combat.ShipAPI;
 import com.fs.starfarer.api.impl.combat.BaseShipSystemScript;
 import data.scripts.utils.*;
-import org.lazywizard.lazylib.combat.CombatUtils;
 import org.lwjgl.util.vector.Vector2f;
 
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.List;
 
 public class DimensionDrivenField_TrainingVersion extends BaseShipSystemScript {
 
@@ -21,12 +18,15 @@ public class DimensionDrivenField_TrainingVersion extends BaseShipSystemScript {
 		CombatEngineAPI engine = Global.getCombatEngine();
 		ShipAPI ship = (ShipAPI) stats.getEntity();
 
+		if (ship == null) return;
+
+		ship.setCollisionClass(CollisionClass.NONE);
 
 		// 获取飞船船尾处圆环的位置
 		Vector2f shipLocation = ARR_LocationUtil.offsetPositionOnShip(ship, -80);
 
 		// 为飞船本身添加拖尾效果
-		ARR_AfterImageUtil.AddFluentAfterImage(ship, new Color(255, 51, 170, 170), 0.1f, 0.02f, 0.2f, false, true, false);
+		ARR_GhostUtil.AddFluentGhost(ship, new Color(255, 51, 170, 170), 0.1f, 0.02f, 0.2f, false, true, false);
 		applyJitterEffect(ship);
 
 		// 对加速度/速度的更改
@@ -43,7 +43,7 @@ public class DimensionDrivenField_TrainingVersion extends BaseShipSystemScript {
 				ship.getVelocity().set(vector);
 			}
 			// 如果速度很小，保持原样或设置为零
-			//ARR_TemporalShellUtil.unapplyTemporalShell(ship);
+			ARR_TemporalShellUtil.unapplyTemporalShell(ship);
 		}else {
 			stats.getMaxSpeed().modifyFlat(id, 400f * effectLevel);
 			stats.getAcceleration().modifyFlat(id, 300f * effectLevel);

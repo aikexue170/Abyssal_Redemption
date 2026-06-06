@@ -1,0 +1,24 @@
+{
+	"id":"DimensionDrivenField_TrainingVersion",
+	"type":"ENGINE_MOD",
+	"aiType":"BURN_DRIVE_TOGGLE",
+
+	"statsScript":"impl.combat.system.DimensionDrivenField_TrainingVersion",
+
+	"flameoutOnImpactChance":0,
+
+	"clampTurnRateAfter":true,
+	"clampMaxSpeedAfter":true,
+	"alwaysAccelerate":true,
+
+	"useSound":"system_burn_drive_activate",
+	"loopSound":"system_burn_drive_loop",
+	"deactivateSound":"system_burn_drive_deactivate",
+	"outOfUsesSound":"engine_disabled",
+	
+	"aiHints":{
+		"activeSpeedIncrease":100,
+		"burstMovementPotential":0,
+		"averageSpeedIncrease":100,
+	}
+}

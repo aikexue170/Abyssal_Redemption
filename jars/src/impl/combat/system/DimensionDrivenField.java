@@ -45,7 +45,7 @@ public class DimensionDrivenField extends BaseShipSystemScript {
 		Vector2f shipLocation = ARR_LocationUtil.offsetPositionOnShip(ship, -80);
 
 		// 为飞船本身添加拖尾效果
-		ARR_AfterImageUtil.AddFluentAfterImage(ship, new Color(255, 51, 170, 170), 0.1f, 0.02f, 0.2f, false, true, false);
+		ARR_GhostUtil.AddFluentGhost(ship, new Color(255, 51, 170, 170), 0.1f, 0.02f, 0.2f, false, true, false);
 		applyJitterEffect(ship);
 
 		// 更新偏导立场的中心位置

@@ -1,5 +1,3 @@
 name,id,tier,rarity,tech/manufacturer,tags,uiTags,base value,unlocked,hidden,hiddenEverywhere,cost_frigate,cost_dest,cost_cruiser,cost_capital,script,desc,short,sModDesc,sprite
-DQN训练器,DQN_trainer,5,,,special,special,20000,TRUE,FALSE,,0,0,0,0,impl.hullmods.PPOTrainer_Continuous,为训练DQN专门设计的舰船插件，每%s秒进行一次决策,向python端发送舰船数据,,graphics/ARR/hullmods/controller.png
-DQN控制器,DQN_user,5,,,special,special,20000,TRUE,FALSE,,0,0,0,0,impl.hullmods.PPOUser_30state,为使用DQN专门设计的舰船插件，每%s秒进行一次决策,向python端发送舰船数据,,graphics/ARR/hullmods/controller.png
 舰船信息显示器,ARR_ShowShipState,5,,,special,special,20000,TRUE,FALSE,,0,0,0,0,impl.hullmods.ARR_ShowShipState,显示舰船信息用的舰船插件,显示舰船信息,,graphics/ARR/hullmods/controller.png
 舰船移动控制器,ARR_ShipController,5,,,special,special,20000,TRUE,FALSE,,0,0,0,0,impl.hullmods.ARR_ShipController,控制飞船移动的插件,控制飞船移动,,graphics/ARR/hullmods/controller.png

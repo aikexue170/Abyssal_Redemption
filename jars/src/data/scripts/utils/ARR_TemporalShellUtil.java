@@ -12,10 +12,6 @@ public class ARR_TemporalShellUtil {
     // 定义时流效果的状态
     private static final String TEMPORAL_SHELL_ACTIVE = "temporal_shell_active";
 
-    // 定义最大和最小时间流逝倍率
-    private static final float MAX_TIME_MULT = 3f;
-    private static final float MIN_TIME_MULT = 0.1f;
-
     // 定义默认的颜色抖动
     private static final Color DEFAULT_JITTER_COLOR = new Color(90, 165, 255, 55);
     private static final Color DEFAULT_JITTER_UNDER_COLOR = new Color(90, 165, 255, 155);

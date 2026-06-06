@@ -10,7 +10,6 @@
     <orderEntry type="library" name="commons-compiler-jdk" level="project" />
     <orderEntry type="library" name="Graphics" level="project" />
     <orderEntry type="library" name="LazyLib-Kotlin" level="project" />
-    <orderEntry type="library" name="fuzzywuzzy-1.3.0" level="project" />
     <orderEntry type="library" name="MagicLib-Kotlin" level="project" />
     <orderEntry type="library" name="ExerelinCore" level="project" />
   </component>
