@@ -1,11 +1,10 @@
 package impl.hullmods;
 
-import com.fs.starfarer.api.Global;
 import com.fs.starfarer.api.combat.BaseHullMod;
 import com.fs.starfarer.api.combat.ShipAPI;
 import data.scripts.utils.ARR_EntityTimerManager;
 import data.scripts.utils.ControlSystem.ShipControlSystem;
-import data.scripts.utils.PPO.SimpleSocketClient;
+import data.scripts.utils.network.SimpleSocketClient;
 
 public class ARR_ShipController extends BaseHullMod {
     ShipControlSystem shipControlSystem = null;

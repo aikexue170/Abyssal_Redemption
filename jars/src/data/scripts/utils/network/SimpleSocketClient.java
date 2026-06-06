@@ -1,4 +1,4 @@
-package data.scripts.utils.PPO;
+package data.scripts.utils.network;
 
 import java.io.*;
 import java.net.Socket;
@@ -9,8 +9,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  * 简单的Socket通讯客户端，用于调试和基本通讯
  */
 public class SimpleSocketClient {
-    private String serverIP;
-    private int serverPort;
+    private final String serverIP;
+    private final int serverPort;
 
     private Socket socket;
     private PrintWriter out;
@@ -18,7 +18,7 @@ public class SimpleSocketClient {
 
     private boolean isConnected = false;
     private Thread receiveThread;
-    private BlockingQueue<String> messageQueue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<String> messageQueue = new LinkedBlockingQueue<>();
 
     // 连接配置
     private static final int SOCKET_TIMEOUT = 2000; // 2秒超时
@@ -194,9 +194,7 @@ public class SimpleSocketClient {
                     // 超时是正常的，继续循环
                     continue;
                 } catch (IOException e) {
-                    if (isConnected) {
-                        System.err.println("Socket客户端: 接收错误 - " + e.getMessage());
-                    }
+                    System.err.println("Socket客户端: 接收错误 - " + e.getMessage());
                     break;
                 }
             }

@@ -5,7 +5,7 @@ import com.fs.starfarer.api.combat.*;
 import data.scripts.utils.ARR_EntityTimerManager;
 import data.scripts.utils.ARR_TemporalShellUtil;
 import data.scripts.utils.ARR_Timer;
-import data.scripts.utils.PPO.PPOClient_30state;
+import data.scripts.utils.network.PPOClient_30state;
 import org.lwjgl.util.vector.Vector2f;
 
 import java.awt.*;

@@ -6,7 +6,7 @@ import data.scripts.utils.ARR_EntityTimerManager;
 import data.scripts.utils.ARR_TemporalShellUtil;
 import data.scripts.utils.ARR_Timer;
 import data.scripts.utils.ControlSystem.ShipControlSystem;
-import data.scripts.utils.PPO.SimpleSocketClient;
+import data.scripts.utils.network.SimpleSocketClient;
 import org.lwjgl.util.vector.Vector2f;
 
 public class PPOTrainer_Continuous extends BaseHullMod {
