@@ -3,3 +3,4 @@ name,id,tier,rarity,tech/manufacturer,tags,uiTags,base value,unlocked,hidden,hid
 舰船移动控制器,ARR_ShipController,5,,,special,special,20000,TRUE,FALSE,,0,0,0,0,impl.hullmods.ARR_ShipController,控制飞船移动的插件,控制飞船移动,,graphics/ARR/hullmods/controller.png
 战斗数据链,ARR_CombatDataLink,5,,,special,special,0,TRUE,FALSE,,0,0,0,0,impl.hullmods.ARR_CombatDataLink,自动注册舰船战斗数据,内部使用,,graphics/ARR/hullmods/controller.png
 训练桥接器,ARR_TrainingBridge,5,,,special,special,20000,TRUE,FALSE,,0,0,0,0,impl.hullmods.ARR_TrainingBridge,每0.1秒向Python发送所有已注册舰船状态并接收动作指令,向Python发送舰船状态并接收动作指令,,graphics/ARR/hullmods/controller.png
+多维并行器,ARR_Duplication,5,,,special,special,20000,TRUE,FALSE,,0,0,0,0,impl.hullmods.ARR_Duplication,进入战斗2秒后在当前位置一次性生成100艘同配置舰船，用于并行强化学习训练。,多维并行生成,,graphics/ARR/hullmods/controller.png
