@@ -17,7 +17,7 @@ import java.util.List;
 public class DimensionDrivenField extends BaseShipSystemScript {
 
 	// 偏导立场实例
-	private ARR_DeflectionFieldUtil deflectionField;
+	private final ARR_DeflectionFieldUtil deflectionField;
 
 	// 实体列表
 	protected List<CombatEntityAPI> entities = new ArrayList<>();
