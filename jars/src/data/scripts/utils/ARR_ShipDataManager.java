@@ -3,14 +3,16 @@ package data.scripts.utils;
 import com.fs.starfarer.api.combat.ShipAPI;
 
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class ARR_ShipDataManager {
 
     private static final ARR_ShipDataManager instance = new ARR_ShipDataManager();
 
-    private final Map<String, ARR_ShipData> shipDataMap = new HashMap<>();
+    /** LinkedHashMap 保证注册顺序即迭代顺序，与通讯序号一致 */
+    private final Map<String, ARR_ShipData> shipDataMap = new LinkedHashMap<>();
+    private int nextIndex = 0;
 
     private ARR_ShipDataManager() {}
 
@@ -22,7 +24,9 @@ public class ARR_ShipDataManager {
         if (ship == null) return;
         String id = ship.getId();
         if (!shipDataMap.containsKey(id)) {
-            shipDataMap.put(id, new ARR_ShipData(ship));
+            ARR_ShipData data = new ARR_ShipData(ship);
+            data.index = nextIndex++;
+            shipDataMap.put(id, data);
         }
     }
 

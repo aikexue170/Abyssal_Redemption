@@ -7,6 +7,8 @@ public class ARR_ShipData {
 
     public final ShipAPI ship;
     public final String shipId;
+    /** 通讯协议用的序号，在 ShipDataManager 注册时分配 */
+    public int index;
 
     private Vector2f location;
     private Vector2f velocity;
@@ -16,6 +18,7 @@ public class ARR_ShipData {
     public ARR_ShipData(ShipAPI ship) {
         this.ship = ship;
         this.shipId = ship.getId();
+        this.index = -1;
     }
 
     public void update(Vector2f location, Vector2f velocity, float angle, float angularVelocity){

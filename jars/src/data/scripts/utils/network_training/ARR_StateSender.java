@@ -31,7 +31,7 @@ public class ARR_StateSender {
         if (!client.isConnected()) return;
 
         for (ARR_ShipData ship : ARR_ShipDataManager.getInstance().getAll()) {
-            String line = ship.shipId + ","
+            String line = ship.index + ","
                     + ship.getLocation().x + ","
                     + ship.getLocation().y + ","
                     + ship.getVelocity().x + ","

@@ -127,3 +127,7 @@ jars/src/
 ## 版权
 
 北棱 (aikexue170) — GPL 协议，详见 [LICENSE](LICENSE)
+
+## 开发笔记
+
+开发过程中遇到的坑和解决方案，记录在 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)。

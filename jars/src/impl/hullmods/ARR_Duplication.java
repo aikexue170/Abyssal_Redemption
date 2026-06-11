@@ -24,7 +24,7 @@ import java.util.List;
 public class ARR_Duplication extends BaseHullMod {
 
     /** 生成数量 */
-    private static final int SPAWN_COUNT = 99;
+    private static final int SPAWN_COUNT = 199;
     /** 第一阶段延迟 — 生成（秒） */
     private static final float PHASE_SPAWN_DELAY = 2f;
     /** 第二阶段延迟 — 统一排列（秒），从生成完成后算起 */
