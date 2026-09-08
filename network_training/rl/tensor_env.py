@@ -317,7 +317,7 @@ class NavEnv:
         # 首次达成驻留: 一次性大奖(随到达速度缩放), 回合继续 (不终止)
         just_awarded = (self.hold_count >= self.hold_steps) & ~self.success_awarded
         time_frac = self.step_count.float() / self.max_steps
-        bonus = self.success_bonus * (2.0 - time_frac)   # t=0 → 2x, t=T → 1x
+        bonus = self.success_bonus * (1.5 - 0.5 * time_frac)   # t=0 → 1.5x, t=T → 1x
         reward = torch.where(just_awarded, reward + bonus, reward)
         self.success_awarded |= just_awarded
         success = self.success_awarded          # 本回合是否曾达成 (统计用)

@@ -34,10 +34,10 @@ def parse_args():
     p.add_argument("--lr", type=float, default=3e-4)
     p.add_argument("--lr-final", type=float, default=1e-5,
                    help="训练结束时学习率 (全程线性衰减)")
-    p.add_argument("--time-penalty", type=float, default=0.01)
+    p.add_argument("--time-penalty", type=float, default=0.005)
     p.add_argument("--gamma", type=float, default=0.99)
     p.add_argument("--ent-coef", type=float, default=0.001)
-    p.add_argument("--ent-decay", type=float, default=0.6,
+    p.add_argument("--ent-decay", type=float, default=0.7,
                    help="每次课程晋级时熵系数乘以此衰减 (精密驻留需要策略收敛)")
     p.add_argument("--init-log-std", type=float, default=-0.3)
     p.add_argument("--randomize", type=float, default=0.15, help="域随机化幅度")
@@ -88,6 +88,7 @@ def main():
     ret_hist: list[float] = []
     succ_hist: list[bool] = []
     dist_hist: list[float] = []
+    best_succ = -1.0               # 最优成功率 (best.pt 保护, 防崩溃丢好状态)
 
     t0 = time.time()
     global_steps = 0
@@ -159,10 +160,16 @@ def main():
             stage_ep_count = 0
             succ_hist.clear()
             env.set_stage(**STAGES[stage])
-            agent.ent_coef = max(agent.ent_coef * args.ent_decay, 1e-4)
+            agent.ent_coef = max(agent.ent_coef * args.ent_decay, 2e-4)
             print(f"[curriculum] 晋级到 stage {stage}: {STAGES[stage]} "
                   f"ent_coef -> {agent.ent_coef:.2g}", flush=True)
 
+        # 最优存档: stage 越高权重越大, 同 stage 内取成功率新高
+        score = stage * 10.0 + succ_rate
+        if stage_ep_count >= args.advance_min_episodes and score > best_succ:
+            best_succ = score
+            agent.save(os.path.join(out_dir, "best.pt"),
+                       extra=dict(iter=it, stage=stage, succ_rate=succ_rate))
         if it % args.save_every == 0 or it == args.iters:
             agent.save(os.path.join(out_dir, "latest.pt"),
                        extra=dict(iter=it, stage=stage, succ_rate=succ_rate))
