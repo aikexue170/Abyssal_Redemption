@@ -1,15 +1,13 @@
 """最小二乘拟合游戏内舰船运动参数，并用 matplotlib 可视化。
 
-模型（对每个通道独立拟合）：
-    dv/dt = a * u - b * v
-    离散化:  dv = (a*u - b*v) * dt
-  - a: 单位开度产生的加速度 (su/s^2 或 度/s^2)
-  - b: 阻尼系数 (1/s)，松开后 dv/dt = -b*v 即为减速特性
-  - 隐含稳态速度 = a / b；游戏内另有硬速度上限，单独报告观测上限
+模型（每个通道独立，一切从简）：
+    油门期:  dv/dt = a * u              —— 恒定加速度，与 v 无关（相图呈水平条带）
+            越过施力上限 force_limit 后只剩很小的恒定爬行 creep（游戏引擎残余效应）
+    上限:    v 最终钳制在 [v_cap_neg, v_cap_pos]
+    滑行期:  dv/dt ≈ 0                  —— 阻力近似为零（实测极小，见 params.json 备注）
 
 关键点（历史踩坑）：游戏直接上报的速度与位置存在时序不同步，
-位置差分得到的速度更准 —— 因此拟合一律使用位置/角度差分速度，
-直接上报速度只用于对比图。
+位置差分得到的速度更准 —— 拟合一律使用位置/角度差分速度。
 
 用法:  python analyze_fit.py [samples.csv]
        不传参数则使用 output/ 下最新的 samples_*.csv
@@ -30,8 +28,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
-CAP_PERCENTILE = 99       # 观测速度上限取该分位数
-CAP_EXCLUDE = 0.9         # 拟合时剔除 |v| > 0.9*cap 的样本（避免硬上限区污染）
+CAP_PERCENTILE = 99       # 速度上限观测取该分位数
+FIT_REGION = 0.9          # 拟合 a 只用 |v| < 0.9*cap 的样本（避开上限截断区）
 
 CHANNEL_TITLES = {
     "move": "Forward/Backward (u>0 forward)",
@@ -58,7 +56,7 @@ def load_samples(path: str):
 
 # ---------------- 差分速度 ----------------
 
-def diff_velocity(channel: str, d: dict) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def diff_velocity(channel: str, d: dict):
     """
     返回 (t_mid, dt, v_meas, v_direct, u)：
       v_meas   —— 位置/角度差分速度（拟合用）
@@ -84,60 +82,124 @@ def diff_velocity(channel: str, d: dict) -> tuple[np.ndarray, np.ndarray, np.nda
     else:
         raise ValueError(channel)
 
-    u = d["u_applied"][:-1]
-    t_mid = t[:-1]
-    return t_mid, dt, v_meas, v_direct, u
+    return t[:-1], dt, v_meas, v_direct, d["u_applied"][:-1]
 
 
 # ---------------- 拟合 ----------------
 
 def fit_channel(channel: str, trials: list[dict]):
-    """对所有 trial 合并做最小二乘；返回参数字典与逐 trial 的差分序列。"""
+    """最小二乘拟合 a（油门期 dv/dt = a*u）与双向速度上限。"""
     seqs = []
     for d in trials:
-        t_mid, dt, v_meas, v_direct, u = diff_velocity(channel, d)
+        t_mid, dt, v, vd, u = diff_velocity(channel, d)
         ok = dt > 1e-4
-        seqs.append(dict(t=t_mid[ok], dt=dt[ok], v=v_meas[ok],
-                         vd=v_direct[ok], u=u[ok], raw=d))
+        seqs.append(dict(t=t_mid[ok], dt=dt[ok], v=v[ok],
+                         vd=vd[ok], u=u[ok], raw=d))
 
-    v_active = np.concatenate([s["v"][s["u"] != 0] for s in seqs if np.any(s["u"] != 0)])
-    if v_active.size == 0:
-        raise RuntimeError(f"通道 {channel} 没有动作生效期间的样本")
-    cap = np.percentile(np.abs(v_active), CAP_PERCENTILE)
+    # 1) 双向速度上限：油门期间 |v| 的高分位数
+    v_pos = np.concatenate([s["v"][s["u"] > 0] for s in seqs if np.any(s["u"] > 0)])
+    v_neg = np.concatenate([s["v"][s["u"] < 0] for s in seqs if np.any(s["u"] < 0)])
+    cap_pos = float(np.percentile(v_pos, CAP_PERCENTILE)) if v_pos.size else 0.0
+    cap_neg = float(np.percentile(v_neg, 100 - CAP_PERCENTILE)) if v_neg.size else 0.0
 
-    # v 是逐区间差分速度序列；dv_k = v_{k+1} - v_k，回归量取区间 k 的 u, dt, v。
-    # 剔除 |v| 接近硬上限的样本（上限区不再线性），以及复位传送造成的异常跳变。
-    rows_x, rows_y = [], []
+    # 2) 分方向拟合。施力区 dv/dt = a*u；越过施力上限后只剩很小的恒定爬行，
+    #    爬行段样本数量多、会淹没回归，因此每个 trial 只取加速段前 5%~40%
+    #    平台速度的"干净斜坡窗口"，窗口内取 dv/dt 中位数，再对 u 过原点回归。
+    def collect(s):
+        dv = np.diff(s["v"])
+        u_k = s["u"][:-1]; dt_k = s["dt"][:-1]; v_k = s["v"][:-1]
+        jump = np.abs(dv) < 10 * max(cap_pos, -cap_neg)   # 剔除复位传送跳变
+        return u_k, v_k, dv / dt_k, jump
+
+    def fit_direction(sign):
+        us, dvdts = [], []
+        for s in seqs:
+            u_k, v_k, dvdt, jump = collect(s)
+            act = (u_k * sign > 0) & jump
+            if not np.any(act):
+                continue
+            plateau = np.max(np.abs(s["v"][np.r_[False, act]]))
+            lo, hi = 0.05 * plateau, 0.4 * plateau
+            ramp = act & (np.abs(v_k) >= lo) & (np.abs(v_k) <= hi)
+            if np.sum(ramp) < 3:
+                ramp = act                            # 窗口太窄则退化为全部油门样本
+            # 每个 trial 取中位数，抗爬行段/异常点污染
+            us.append(float(np.median(u_k[act])))
+            dvdts.append(float(np.median(dvdt[ramp])))
+        U = np.array(us); D = np.array(dvdts)
+        a = float(U @ D / (U @ U))
+        # 施力上限：该方向油门样本中 |dv/dt| 仍高于 a*|u|/2 的最大 |v|
+        lim = 0.0
+        for s in seqs:
+            u_k, v_k, dvdt, jump = collect(s)
+            mask = (u_k * sign > 0) & jump & (dvdt * sign > 0.5 * a * np.abs(u_k))
+            if np.any(mask):
+                lim = max(lim, float(np.max(np.abs(v_k[mask]))))
+        # 爬行：施力上限外油门样本的平均 dv/dt
+        cr = []
+        for s in seqs:
+            u_k, v_k, dvdt, jump = collect(s)
+            beyond = (v_k > lim) if sign > 0 else (v_k < -lim)
+            mask = (u_k * sign > 0) & beyond & jump
+            if np.any(mask):
+                cr.append(dvdt[mask])
+        return a, lim, (float(np.mean(np.concatenate(cr))) if cr else 0.0)
+
+    a_pos, lim_pos, creep_pos = fit_direction(+1)
+    a_neg, lim_neg, creep_neg = fit_direction(-1)
+
+    # R²：在全部施力区样本上全局评估 dv/dt 预测
+    dvs, preds = [], []
+    for s in seqs:
+        u_k, v_k, dvdt, jump = collect(s)
+        pred = np.where(u_k > 0, a_pos * u_k, np.where(u_k < 0, a_neg * u_k, 0.0))
+        forcing = ((u_k > 0) & (v_k < lim_pos)) | ((u_k < 0) & (v_k > -lim_neg))
+        mask = forcing & jump
+        if np.any(mask):
+            dvs.append(dvdt[mask]); preds.append(pred[mask])
+    D = np.concatenate(dvs); P = np.concatenate(preds)
+    r2 = 1.0 - float(((D - P) ** 2).sum()) / float(((D - D.mean()) ** 2).sum())
+
+    # 3) 滑行期实测减速度（仅供参考，模型中按 0 处理）
+    coast = []
     for s in seqs:
         dv = np.diff(s["v"])
         u_k = s["u"][:-1]; dt_k = s["dt"][:-1]; v_k = s["v"][:-1]
-        mask = (np.abs(v_k) < CAP_EXCLUDE * cap) & (np.abs(dv) < 10 * cap)
-        rows_x.append(np.stack([u_k[mask] * dt_k[mask], -v_k[mask] * dt_k[mask]], axis=1))
-        rows_y.append(dv[mask])
-
-    X = np.concatenate(rows_x); Y = np.concatenate(rows_y)
-    (a, b), *_ = np.linalg.lstsq(X, Y, rcond=None)
-    y_hat = X @ np.array([a, b])
-    ss_res = float(np.sum((Y - y_hat) ** 2))
-    ss_tot = float(np.sum((Y - Y.mean()) ** 2))
-    r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
+        mask = (u_k == 0) & (np.abs(v_k) > 1.0)
+        if np.any(mask):
+            coast.append((-dv[mask] / dt_k[mask]) * np.sign(v_k[mask]))
+    coast_decel = float(np.mean(np.concatenate(coast))) if coast else 0.0
 
     return {
-        "accel_per_unit": float(a),          # 单位开度加速度
-        "damping": float(b),                 # 阻尼系数 1/s
-        "implied_max_speed": float(a / b) if b > 1e-9 else None,
-        "observed_speed_cap": float(cap),    # 观测速度上限（硬上限附近）
+        "accel_per_unit_pos": a_pos,   # 正向单位开度加速度 (su/s^2 或 度/s^2)
+        "accel_per_unit_neg": a_neg,   # 负向单位开度加速度（作用于 u<0）
+        "force_limit_pos": lim_pos,    # 正向施力上限（超过后进入爬行区）
+        "force_limit_neg": lim_neg,    # 负向施力上限（正数，越过 -lim_neg 后爬行）
+        "creep_pos": creep_pos,        # 正向爬行加速度（常数）
+        "creep_neg": creep_neg,        # 负向爬行加速度（常数，通常为负）
+        "v_cap_pos": cap_pos,          # 正向速度最终上限（钳制）
+        "v_cap_neg": cap_neg,          # 负向速度最终上限（钳制，负值）
+        "coast_decel_measured": coast_decel,  # 实测滑行减速度（模型按 0 处理）
         "r2": r2,
-        "n_samples": int(X.shape[0]),
     }, seqs
 
 
-def simulate(seq: dict, a: float, b: float) -> np.ndarray:
-    """用拟合参数对单条 trial 前向仿真，用于和实测对比。"""
+def simulate(seq: dict, params: dict) -> np.ndarray:
+    """前向仿真：施力区 dv = a*u*dt；越过施力上限 dv = creep*dt；
+    最终钳制在 [v_cap_neg, v_cap_pos]；滑行无阻力。"""
     v = np.zeros_like(seq["v"])
-    v[0] = seq["v"][0]
+    v[0] = np.clip(seq["v"][0], params["v_cap_neg"], params["v_cap_pos"])
     for k in range(len(v) - 1):
-        v[k + 1] = v[k] + (a * seq["u"][k] - b * v[k]) * seq["dt"][k]
+        u = seq["u"][k]
+        if u > 0:
+            dv = (params["accel_per_unit_pos"] * u
+                  if v[k] < params["force_limit_pos"] else params["creep_pos"]) * seq["dt"][k]
+        elif u < 0:
+            dv = (params["accel_per_unit_neg"] * u
+                  if v[k] > -params["force_limit_neg"] else params["creep_neg"]) * seq["dt"][k]
+        else:
+            dv = 0.0
+        v[k + 1] = np.clip(v[k] + dv, params["v_cap_neg"], params["v_cap_pos"])
     return v
 
 
@@ -159,23 +221,23 @@ def plot_channel(channel: str, params: dict, seqs: list[dict], outdir: str) -> s
             t0 = s["t"][nz[0]] if nz.size else s["t"][0]
             ax.plot(s["t"] - t0, s["v"], alpha=0.45, lw=1,
                     color="tab:blue", label="_measured")
-            ax.plot(s["t"] - t0, simulate(s, params["accel_per_unit"], params["damping"]),
+            ax.plot(s["t"] - t0, simulate(s, params),
                     ls="--", lw=1.6, color="tab:red", label="_model")
-        ax.axhline(params["observed_speed_cap"] * np.sign(u_val), color="gray", ls=":", lw=1)
+        cap_line = params["v_cap_pos"] if u_val > 0 else params["v_cap_neg"]
+        ax.axhline(cap_line, color="gray", ls=":", lw=1)
         ax.set_title(f"u = {u_val:+.2f}")
         ax.set_xlabel("t since action start (s)")
         ax.grid(alpha=0.3)
     axes[0].set_ylabel("velocity (su/s or deg/s)")
     handles = [plt.Line2D([], [], color="tab:blue", label="measured (pos-diff)"),
                plt.Line2D([], [], color="tab:red", ls="--", label="fitted model"),
-               plt.Line2D([], [], color="gray", ls=":", label="observed cap")]
+               plt.Line2D([], [], color="gray", ls=":", label="speed cap")]
     fig.legend(handles=handles, loc="upper right")
-    vmax = params['implied_max_speed']
-    vmax_str = f"{vmax:.1f}" if vmax is not None else "inf"
     fig.suptitle(f"{CHANNEL_TITLES.get(channel, channel)}\n"
-                 f"a={params['accel_per_unit']:.2f}, b={params['damping']:.3f}, "
-                 f"v_max(implied)={vmax_str}, "
-                 f"cap={params['observed_speed_cap']:.1f}, R2={params['r2']:.3f}")
+                 f"a+={params['accel_per_unit_pos']:.2f}, a-={params['accel_per_unit_neg']:.2f}, "
+                 f"force_limit=[{-params['force_limit_neg']:.1f}, {params['force_limit_pos']:.1f}], "
+                 f"cap=[{params['v_cap_neg']:.1f}, {params['v_cap_pos']:.1f}], "
+                 f"R2={params['r2']:.3f}")
     fig.tight_layout()
     path = os.path.join(outdir, f"fit_{channel}.png")
     fig.savefig(path, dpi=140)
@@ -226,22 +288,23 @@ def main() -> None:
         params, seqs = fit_channel(channel, trials)
         params_all[channel] = params
         seqs_by_channel[channel] = seqs
-        print(f"[拟合] {channel:7s}  a={params['accel_per_unit']:9.3f}  "
-              f"b={params['damping']:7.4f}  v_max={params['implied_max_speed']}  "
-              f"cap={params['observed_speed_cap']:8.2f}  R2={params['r2']:.4f}  "
-              f"n={params['n_samples']}")
+        print(f"[拟合] {channel:7s}  a+={params['accel_per_unit_pos']:9.3f}  "
+              f"a-={params['accel_per_unit_neg']:9.3f}  "
+              f"force_limit=[{-params['force_limit_neg']:7.2f}, {params['force_limit_pos']:7.2f}]  "
+              f"cap=[{params['v_cap_neg']:7.2f}, {params['v_cap_pos']:7.2f}]  "
+              f"R2={params['r2']:.4f}")
         p = plot_channel(channel, params, seqs, OUTPUT_DIR)
         print(f"        图 -> {p}")
 
-    # 用 move 通道做一次差分 vs 直报速度对比图
     if "move" in seqs_by_channel:
         p = plot_source_compare(seqs_by_channel["move"], OUTPUT_DIR)
         print(f"        图 -> {p}")
 
     params_all["_meta"] = {
-        "model": "dv = (a*u - b*v) * dt",
+        "model": "dv = a*u*dt within force_limit, creep beyond, clamped to [v_cap_neg, v_cap_pos]; coast drag approximated as 0",
         "source_file": os.path.basename(path),
-        "note": "速度/角速度均由位置与朝向差分得到；游戏直接上报速度存在时序不同步，未用于拟合。",
+        "note": "速度/角速度由位置与朝向差分得到；游戏直报速度存在时序不同步，未用于拟合。"
+                "coast_decel_measured 为实测滑行减速度（很小），模型中按 0 处理。",
     }
     out = os.path.join(OUTPUT_DIR, "params.json")
     with open(out, "w", encoding="utf-8") as f:
