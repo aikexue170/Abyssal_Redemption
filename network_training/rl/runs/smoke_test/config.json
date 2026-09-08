@@ -1,0 +1,18 @@
+{
+  "num_envs": 512,
+  "num_steps": 128,
+  "iters": 20,
+  "lr": 0.0003,
+  "gamma": 0.99,
+  "ent_coef": 0.0,
+  "randomize": 0.15,
+  "max_steps": 400,
+  "seed": 0,
+  "device": "cuda",
+  "run_name": "smoke_test",
+  "start_stage": 0,
+  "advance_threshold": 0.7,
+  "advance_min_episodes": 4000,
+  "save_every": 20,
+  "resume": null
+}
