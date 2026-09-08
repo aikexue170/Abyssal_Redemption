@@ -1,5 +1,3 @@
 name,id,tier,rarity,tech/manufacturer,tags,uiTags,base value,unlocked,hidden,hiddenEverywhere,cost_frigate,cost_dest,cost_cruiser,cost_capital,script,desc,short,sModDesc,sprite
 舰船信息显示器,ARR_ShowShipState,5,,,special,special,20000,TRUE,FALSE,,0,0,0,0,impl.hullmods.ARR_ShowShipState,显示舰船信息用的舰船插件,显示舰船信息,,graphics/ARR/hullmods/controller.png
-舰船移动控制器,ARR_ShipController,5,,,special,special,20000,TRUE,FALSE,,0,0,0,0,impl.hullmods.ARR_ShipController,控制飞船移动的插件,控制飞船移动,,graphics/ARR/hullmods/controller.png
-战斗数据链,ARR_CombatDataLink,5,,,special,special,0,TRUE,FALSE,,0,0,0,0,impl.hullmods.ARR_CombatDataLink,自动注册舰船战斗数据,内部使用,,graphics/ARR/hullmods/controller.png
-训练桥接器,ARR_TrainingBridge,5,,,special,special,20000,TRUE,FALSE,,0,0,0,0,impl.hullmods.ARR_TrainingBridge,每0.1秒向Python发送所有已注册舰船状态并接收动作指令,向Python发送舰船状态并接收动作指令,,graphics/ARR/hullmods/controller.png
+训练桥接器,ARR_TrainingBridge,5,,,special,special,20000,TRUE,FALSE,,0,0,0,0,impl.hullmods.ARR_TrainingBridge,连接Python训练端：上报舰船状态、执行动作指令、响应复位指令,连接Python训练端,,graphics/ARR/hullmods/controller.png
