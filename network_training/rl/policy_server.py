@@ -57,6 +57,7 @@ class SharedState:
         self.auto = True
         self.quit = False
         self.trail = deque(maxlen=600)   # 最近 60s (10Hz)
+        self.act_hist = deque(maxlen=200)  # 最近 ~20s 动作 (10Hz): (t, m, t_, s)
 
 
 def wrap_deg(a: float) -> float:
@@ -101,15 +102,27 @@ def control_loop(server: TrainingServer, agent: PPO, s: SharedState):
         if a is not None:
             server.send_action(sid, move=a[0], turn=a[1], strafe=a[2])
             last_sent_sim = s.sim_time
+            with s.lock:
+                s.act_hist.append((time.time(), a[0], a[1], a[2]))
         now = time.time()
         if now - last_telem > 2.0:
             last_telem = now
             with s.lock:
                 d = math.hypot(s.target_x - s.x, s.target_y - s.y)
+                recent = [h for h in s.act_hist if now - h[0] < 2.0]
+                if recent:
+                    duty = sum(1 for h in recent if abs(h[1]) > 0.5) / len(recent)
+                    m = sum(h[1] for h in recent) / len(recent)
+                    tn = sum(h[2] for h in recent) / len(recent)
+                    sf = sum(h[3] for h in recent) / len(recent)
+                    act_str = (f"act(m/t/s)=({m:5.2f},{tn:5.2f},{sf:5.2f}) "
+                               f"duty={duty:4.0%} n={len(recent)}")
+                else:
+                    act_str = "act=--"
                 print(f"[telem] pos=({s.x:.0f},{s.y:.0f}) dist={d:.0f} "
                       f"speed={math.hypot(s.vx, s.vy):.1f} "
-                      f"dh={wrap_deg(s.target_facing - s.facing):.1f} "
-                      f"auto={s.auto} target={s.has_target}", flush=True)
+                      f"dh={wrap_deg(s.target_facing - s.facing):.1f} {act_str}",
+                      flush=True)
         time.sleep(1.0 / CONTROL_HZ)
 
 
@@ -241,6 +254,7 @@ def main():
     fig.canvas.mpl_connect("button_press_event", on_click)
 
     ARROW_LEN = 60.0
+    plt.show(block=False)          # 不调用 show() TkAgg 窗口不会映射到桌面
     try:
         while True:
             with s.lock:
