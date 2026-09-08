@@ -32,6 +32,9 @@ def parse_args():
     p.add_argument("--num-steps", type=int, default=256, help="每轮 rollout 步数")
     p.add_argument("--iters", type=int, default=300)
     p.add_argument("--lr", type=float, default=3e-4)
+    p.add_argument("--lr-final", type=float, default=1e-5,
+                   help="训练结束时学习率 (全程线性衰减)")
+    p.add_argument("--time-penalty", type=float, default=0.01)
     p.add_argument("--gamma", type=float, default=0.99)
     p.add_argument("--ent-coef", type=float, default=0.001)
     p.add_argument("--ent-decay", type=float, default=0.6,
@@ -61,7 +64,8 @@ def main():
 
     torch.manual_seed(args.seed)
     env = NavEnv(num_envs=args.num_envs, device=args.device, dt=0.05,
-                 max_steps=args.max_steps, randomize=args.randomize, seed=args.seed)
+                 max_steps=args.max_steps, randomize=args.randomize,
+                 time_penalty=args.time_penalty, seed=args.seed)
     stage = args.start_stage
     env.set_stage(**STAGES[stage])
 
@@ -90,6 +94,10 @@ def main():
     print(f"run={run_name} envs={args.num_envs} steps/iter={args.num_steps} "
           f"batch={args.num_envs * args.num_steps} device={args.device}")
     for it in range(1, args.iters + 1):
+        # 学习率线性衰减
+        lr_now = args.lr + (args.lr_final - args.lr) * (it - 1) / max(args.iters - 1, 1)
+        for g in agent.opt.param_groups:
+            g["lr"] = lr_now
         for t in range(args.num_steps):
             action, logp, value, raw = agent.net.act(obs)
             next_obs, rew, terminated, truncated, info = env.step(action)
@@ -142,7 +150,7 @@ def main():
         print(f"iter {it:4d} | stage {stage} | ret {mean_ret:8.2f} | "
               f"succ {succ_rate:5.1%} | dist {mean_dist:7.1f} | "
               f"kl {stats['kl']:.4f} | ent {stats['ent']:.3f} | "
-              f"vf {stats['vf']:.4f} | SPS {sps}", flush=True)
+              f"vf {stats['vf']:.4f} | lr {lr_now:.2e} | SPS {sps}", flush=True)
 
         # 课程晋级
         if (stage < len(STAGES) - 1 and succ_rate > args.advance_threshold

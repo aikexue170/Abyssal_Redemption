@@ -60,6 +60,7 @@ STAGES = [
     dict(arrival_radius=20.0, stop_speed=8.0, success_angle=180.0, heading_weight=0.05, hold_time=1.0),
     dict(arrival_radius=12.0, stop_speed=5.0, success_angle=20.0, heading_weight=0.10, hold_time=1.0),
     dict(arrival_radius=8.0, stop_speed=3.5, success_angle=8.0, heading_weight=0.15, hold_time=1.0),
+    dict(arrival_radius=6.0, stop_speed=3.0, success_angle=6.0, heading_weight=0.20, hold_time=1.0),
 ]
 
 
@@ -111,6 +112,7 @@ class NavEnv:
                  timeout_dist_penalty: float = 0.02,   # 超时惩罚 = 系数 x 剩余距离
                  near_speed_weight: float = 0.002,      # 近场高速惩罚 (鼓励刹车剖面)
                  near_radius: float = 150.0,
+                 time_penalty: float = 0.005,            # 每步时间惩罚 (v2 加大以追求速度)
                  seed: int = 0):
         self.N = num_envs
         self.device = torch.device(device)
@@ -123,6 +125,7 @@ class NavEnv:
         self.timeout_dist_penalty = timeout_dist_penalty
         self.near_speed_weight = near_speed_weight
         self.near_radius = near_radius
+        self.time_penalty = time_penalty
         self.g = torch.Generator(device=self.device)
         self.g.manual_seed(seed)
 
@@ -144,7 +147,8 @@ class NavEnv:
         # 成功需持续驻留的步数 (1 秒)
         self.hold_steps = int(1.0 / dt)
         # 成功一次性大奖; 成功后回合不终止 (否则停在目标点的驻留价值流 > 大奖,
-        # 理性策略会刻意拒绝成功)
+        # 理性策略会刻意拒绝成功)。
+        # v2: 大奖随到达时间缩放 [bonus, 2*bonus], 越早到达越高 —— 速度是第一优先级
         self.success_bonus = 50.0
         # 逃远判定
         self.oob_dist = 2000.0
@@ -289,7 +293,7 @@ class NavEnv:
         speed = self.vel.norm(dim=-1)
 
         reward = 0.1 * (self.prev_dist - dist)          # 距离进展 shaping
-        reward -= 0.005                                  # 时间惩罚
+        reward -= self.time_penalty                    # 时间惩罚
         reward -= self.spin_penalty * self.ang_vel.abs() / 20.0   # 角速度惩罚
 
         in_zone = dist < self.arrival_radius
@@ -310,9 +314,11 @@ class NavEnv:
 
         self.hold_count = torch.where(ok, self.hold_count + 1,
                                       torch.zeros_like(self.hold_count))
-        # 首次达成驻留: 一次性大奖, 回合继续 (不终止)
+        # 首次达成驻留: 一次性大奖(随到达速度缩放), 回合继续 (不终止)
         just_awarded = (self.hold_count >= self.hold_steps) & ~self.success_awarded
-        reward = torch.where(just_awarded, reward + self.success_bonus, reward)
+        time_frac = self.step_count.float() / self.max_steps
+        bonus = self.success_bonus * (2.0 - time_frac)   # t=0 → 2x, t=T → 1x
+        reward = torch.where(just_awarded, reward + bonus, reward)
         self.success_awarded |= just_awarded
         success = self.success_awarded          # 本回合是否曾达成 (统计用)
 
