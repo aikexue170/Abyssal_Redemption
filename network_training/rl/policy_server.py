@@ -6,6 +6,7 @@
 
 终端命令:
     target <x> <y> [heading_deg]   设置目标位置与目标朝向(朝向省略则保持当前值)
+    face <heading_deg>             只改目标朝向
     here                           打印当前船坐标/朝向/速度
     reset                          发送 RESET 回出生姿态
     stop / go                      暂停 / 恢复策略控制
@@ -13,8 +14,9 @@
 
 实时窗口:
     蓝点+蓝箭头 = 船当前位置/朝向, 红星+红箭头 = 目标位置/目标朝向,
-    灰色尾迹 = 最近 60 秒轨迹。左键点击窗口任意位置 = 设为目标点(朝向不变)。
-    左上角文本实时显示坐标读数。
+    灰色尾迹 = 最近 60 秒轨迹。
+    左键点击 = 设目标点(朝向不变); 左键按住拖拽 = 设目标点 + 朝向(拖出的方向);
+    右键点击 = 只改朝向(从目标点指向点击处)。左上角文本实时显示坐标读数。
 """
 
 from __future__ import annotations
@@ -127,7 +129,7 @@ def control_loop(server: TrainingServer, agent: PPO, s: SharedState):
 
 
 def input_loop(server: TrainingServer, s: SharedState):
-    print("命令: target <x> <y> [heading] | here | reset | stop | go | quit")
+    print("命令: target <x> <y> [heading] | face <deg> | here | reset | stop | go | quit")
     while True:
         try:
             line = sys.stdin.readline()
@@ -147,6 +149,9 @@ def input_loop(server: TrainingServer, s: SharedState):
                 s.has_target = True
                 print(f"[target] ({s.target_x:.0f}, {s.target_y:.0f}) "
                       f"heading {s.target_facing:.0f}°", flush=True)
+            elif cmd == "face" and len(parts) >= 2:
+                s.target_facing = float(parts[1])
+                print(f"[face] 目标朝向 -> {s.target_facing:.0f}°", flush=True)
             elif cmd == "here":
                 print(f"[here] pos=({s.x:.1f}, {s.y:.1f}) facing={s.facing:.1f}° "
                       f"speed={math.hypot(s.vx, s.vy):.1f} angvel={s.ang_vel:.1f}",
@@ -245,13 +250,43 @@ def main():
     ax.set_xlabel("x (su)")
     ax.set_ylabel("y (su)")
 
-    def on_click(ev):
-        if ev.inaxes is ax and ev.button == 1:
+    drag = {"active": False}
+
+    def heading_of(ev) -> float:
+        return math.degrees(math.atan2(ev.ydata - s.target_y,
+                                       ev.xdata - s.target_x))
+
+    def on_press(ev):
+        if ev.inaxes is not ax:
+            return
+        if ev.button == 1:                      # 左键: 设位置, 进入拖拽定向
             with s.lock:
                 s.target_x, s.target_y = float(ev.xdata), float(ev.ydata)
                 s.has_target = True
-            print(f"[click] target -> ({ev.xdata:.0f}, {ev.ydata:.0f})", flush=True)
-    fig.canvas.mpl_connect("button_press_event", on_click)
+            drag["active"] = True
+            print(f"[click] target -> ({ev.xdata:.0f}, {ev.ydata:.0f}) "
+                  f"(拖拽可设朝向)", flush=True)
+        elif ev.button == 3:                    # 右键: 只设朝向
+            with s.lock:
+                if s.has_target:
+                    s.target_facing = heading_of(ev) % 360.0
+                    print(f"[right-click] 目标朝向 -> {s.target_facing:.0f}°",
+                          flush=True)
+
+    def on_motion(ev):
+        if drag["active"] and ev.inaxes is ax:
+            with s.lock:
+                s.target_facing = heading_of(ev) % 360.0
+
+    def on_release(ev):
+        if drag["active"]:
+            drag["active"] = False
+            with s.lock:
+                print(f"[drag] 目标朝向 -> {s.target_facing:.0f}°", flush=True)
+
+    fig.canvas.mpl_connect("button_press_event", on_press)
+    fig.canvas.mpl_connect("motion_notify_event", on_motion)
+    fig.canvas.mpl_connect("button_release_event", on_release)
 
     ARROW_LEN = 60.0
     plt.show(block=False)          # 不调用 show() TkAgg 窗口不会映射到桌面
