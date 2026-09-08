@@ -11,6 +11,7 @@
 | `training_server.py` | TCP 服务器，接收状态帧、下发动作/复位指令 |
 | `run_sampling.py` | 采样主程序：动作矩阵 × 每组 3 次，自动复位归位 |
 | `analyze_fit.py` | 最小二乘拟合 + matplotlib 可视化 |
+| `evaluate_model.py` | 复合运动评估：游戏真实轨迹 vs 拟合模型仿真轨迹对比 |
 
 ## 协议
 
@@ -25,6 +26,8 @@
 1. 构建 jar 并启动游戏，进入战斗，给被测舰船装上 **训练桥接器**（ARR_TrainingBridge）
 2. `python run_sampling.py` —— 自动跑完动作矩阵，样本存到 `output/samples_*.csv`
 3. `python analyze_fit.py` —— 拟合并输出 `output/params.json` 与 `fit_*.png`
+4. `python evaluate_model.py` —— 播放 30s 复合运动并用拟合参数离线仿真（dt=0.05），
+   输出轨迹对比图与位置误差统计（参考：平均 ≈17-21 su，轨迹长 ≈940 su）
 
 ## 拟合模型（分段恒定加速度，一切从简）
 
