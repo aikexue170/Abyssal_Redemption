@@ -54,6 +54,10 @@ def parse_args():
                    help="晋级所需最少回合数 (防早期虚高)")
     p.add_argument("--save-every", type=int, default=10)
     p.add_argument("--resume", type=str, default=None, help="checkpoint 路径")
+    p.add_argument("--compile", action="store_true",
+                   help="torch.compile(reduce-overhead/CUDA graphs) 加速 env.step 与策略前向")
+    p.add_argument("--benchmark", type=int, default=0,
+                   help="基准模式: 只跑 N 轮打印 SPS 后退出")
     return p.parse_args()
 
 
@@ -83,6 +87,28 @@ def main():
         print(f"[resume] {args.resume}")
     agent.init_buffer(args.num_steps, args.num_envs, OBS_DIM, ACT_DIM)
 
+    # torch.compile 两级策略 (针对弱 CPU 的 kernel-launch 瓶颈):
+    #  - env.step: 默认模式, 仅 kernel 融合 (函数有自状态 in-place 变异, 与 CUDA graphs 不兼容)
+    #  - net.act/value: reduce-overhead (CUDA graphs), 无输入变异可用图回放;
+    #    图输出是静态缓冲, 跨调用保留前必须 clone, 且每次调用前 mark_step_begin
+    env_step = env.step
+    net_act = agent.net.act
+    net_value = agent.net.value
+    if args.compile:
+        env_step = torch.compile(env.step, fullgraph=False)
+        _act_c = torch.compile(agent.net.act, mode="reduce-overhead", fullgraph=False)
+        _val_c = torch.compile(agent.net.value, mode="reduce-overhead", fullgraph=False)
+
+        def net_act(obs):
+            torch.compiler.cudagraph_mark_step_begin()
+            a, l, v, r = _act_c(obs)
+            return a, l.clone(), v.clone(), r.clone()
+
+        def net_value(obs):
+            torch.compiler.cudagraph_mark_step_begin()
+            return _val_c(obs).clone()
+        print("[compile] env.step=fusion, act/value=reduce-overhead(CUDA graphs)")
+
     obs = env.reset()
     # 统计 (滚动)
     ep_ret = torch.zeros(args.num_envs, device=args.device)
@@ -105,8 +131,8 @@ def main():
         for g in agent.opt.param_groups:
             g["lr"] = lr_now
         for t in range(args.num_steps):
-            action, logp, value, raw = agent.net.act(obs)
-            next_obs, rew, terminated, truncated, info = env.step(action)
+            action, logp, value, raw = net_act(obs)
+            next_obs, rew, terminated, truncated, info = env_step(action)
             done = terminated | truncated
 
             b = agent.buf
@@ -119,7 +145,7 @@ def main():
             b["val"][t] = value
             # 截断回合: 记录终态观测价值用于自举
             if truncated.any():
-                tv = agent.net.value(info["terminal_obs"][truncated])
+                tv = net_value(info["terminal_obs"][truncated])
                 b["tval"][t][truncated] = tv
 
             ep_ret += rew
@@ -142,9 +168,14 @@ def main():
             obs = next_obs
         global_steps += args.num_steps * args.num_envs
 
-        next_value = agent.net.value(obs)
+        next_value = net_value(obs)
         adv, ret = agent.compute_returns(next_value)
         stats = agent.update(adv, ret)
+
+        if args.benchmark and it >= args.benchmark:
+            sps_now = int(global_steps / (time.time() - t0))
+            print(f"[benchmark] {args.benchmark} 轮完成, SPS {sps_now}")
+            return
 
         # 滚动指标
         win = min(len(succ_hist), 1000)
