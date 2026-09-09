@@ -54,10 +54,19 @@ def main():
     done_all = torch.zeros(n, dtype=torch.bool, device=args.device)
     success = torch.zeros(n, dtype=torch.bool, device=args.device)
     steps_used = torch.full((n,), env.max_steps, dtype=torch.long)
+    cos_psi_sum = 0.0
+    cos_psi_cnt = 0
 
     for t in range(env.max_steps):
         action, _, _, _ = agent.net.act(obs, deterministic=True)
         obs, rew, term, trunc, info = env.step(action)
+        # 巡航段 (dist>150) 船头指向目标点程度统计
+        rel, dist_now, _ = env._dist_dh()
+        thr = torch.deg2rad(env.facing)
+        cpsi = (torch.cos(thr) * rel[:, 0] + torch.sin(thr) * rel[:, 1]) / dist_now
+        cruise = dist_now > 150.0
+        cos_psi_sum += float(cpsi[cruise].sum())
+        cos_psi_cnt += int(cruise.sum())
         traj[t + 1] = env.pos.cpu()
         fac[t + 1] = env.facing.cpu()
         newly = info["done"] & ~done_all
@@ -78,6 +87,9 @@ def main():
           f"平均终距 {final_dist.mean().item():.1f} su  "
           f"平均终速 {speed.mean().item():.2f} su/s  "
           f"平均朝向误差 {dh.abs().mean().item():.1f}°")
+    if cos_psi_cnt:
+        print(f"巡航段船头指向 cos_psi 均值: {cos_psi_sum / cos_psi_cnt:.3f} "
+              f"(1=正对目标点, 0=侧向, -1=屁股对)")
 
     # ---------------- 绘图 ----------------
     cols = 4

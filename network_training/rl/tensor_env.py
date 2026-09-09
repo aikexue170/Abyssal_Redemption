@@ -113,6 +113,9 @@ class NavEnv:
                  near_speed_weight: float = 0.002,      # 近场高速惩罚 (鼓励刹车剖面)
                  near_radius: float = 150.0,
                  time_penalty: float = 0.005,            # 每步时间惩罚 (v2 加大以追求速度)
+                 align_far_weight: float = 0.03,   # 远场船头指向目标点奖励 (cos psi)
+                 align_far_radius: float = 150.0,
+                 tail_penalty_weight: float = 0.02,  # 近场屁股对目标惩罚 (单边)
                  seed: int = 0):
         self.N = num_envs
         self.device = torch.device(device)
@@ -126,6 +129,9 @@ class NavEnv:
         self.near_speed_weight = near_speed_weight
         self.near_radius = near_radius
         self.time_penalty = time_penalty
+        self.align_far_weight = align_far_weight
+        self.align_far_radius = align_far_radius
+        self.tail_penalty_weight = tail_penalty_weight
         self.g = torch.Generator(device=self.device)
         self.g.manual_seed(seed)
 
@@ -289,12 +295,21 @@ class NavEnv:
         self.step_count += 1
 
         # ---------------- 奖励与终止 ----------------
-        _, dist, dh = self._dist_dh()
+        rel, dist, dh = self._dist_dh()
         speed = self.vel.norm(dim=-1)
 
         reward = 0.1 * (self.prev_dist - dist)          # 距离进展 shaping
         reward -= self.time_penalty                    # 时间惩罚
         reward -= self.spin_penalty * self.ang_vel.abs() / 20.0   # 角速度惩罚
+
+        # 方向 shaping: cos(psi) = 船头与目标点连线夹角的余弦
+        thr = torch.deg2rad(self.facing)
+        cos_psi = (torch.cos(thr) * rel[:, 0] + torch.sin(thr) * rel[:, 1]) / dist
+        far = (dist > self.align_far_radius).float()
+        reward += self.align_far_weight * cos_psi * far            # 远场: 双向
+        mid = ((dist <= self.align_far_radius)
+               & (dist > self.arrival_radius * 2.0)).float()
+        reward += self.tail_penalty_weight * torch.clamp(cos_psi, max=0.0) * mid  # 近场: 单边罚
 
         in_zone = dist < self.arrival_radius
         stopped = speed < self.stop_speed

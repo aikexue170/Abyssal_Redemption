@@ -35,6 +35,8 @@ def parse_args():
     p.add_argument("--lr-final", type=float, default=1e-5,
                    help="训练结束时学习率 (全程线性衰减)")
     p.add_argument("--time-penalty", type=float, default=0.005)
+    p.add_argument("--align-far-weight", type=float, default=0.03)
+    p.add_argument("--tail-penalty-weight", type=float, default=0.02)
     p.add_argument("--gamma", type=float, default=0.99)
     p.add_argument("--ent-coef", type=float, default=0.001)
     p.add_argument("--ent-decay", type=float, default=0.7,
@@ -65,7 +67,9 @@ def main():
     torch.manual_seed(args.seed)
     env = NavEnv(num_envs=args.num_envs, device=args.device, dt=0.05,
                  max_steps=args.max_steps, randomize=args.randomize,
-                 time_penalty=args.time_penalty, seed=args.seed)
+                 time_penalty=args.time_penalty,
+                 align_far_weight=args.align_far_weight,
+                 tail_penalty_weight=args.tail_penalty_weight, seed=args.seed)
     stage = args.start_stage
     env.set_stage(**STAGES[stage])
 
