@@ -32,6 +32,10 @@ class ActorCritic(nn.Module):
                  init_log_std: float = -0.5, min_std: float = 0.1):
         super().__init__()
         self.min_std = min_std   # 标准差下限: 防探索崩溃 (历史教训: 熵崩后高 lr 打崩策略)
+        # buffer 形式参与 clamp: torch.compile 会把 python 标量烘焙成图常量,
+        # buffer 是图输入且地址固定, fill_ 就地改值对 eager/fusion/CUDA graphs 回放都生效,
+        # 训练末段退火 min_std 时通过 set_min_std 动态调整。
+        self.register_buffer("min_std_t", torch.tensor(float(min_std)))
         self.actor = nn.Sequential(*_mlp([obs_dim, hidden, hidden, act_dim]))
         self.critic = nn.Sequential(*_mlp([obs_dim, hidden, hidden, 1]))
         self.log_std = nn.Parameter(torch.full((act_dim,), init_log_std))
@@ -45,7 +49,7 @@ class ActorCritic(nn.Module):
 
     def forward(self, obs: torch.Tensor):
         mean = self.actor(obs)
-        std = self.log_std.exp().clamp(self.min_std, 2.0).expand_as(mean)
+        std = self.log_std.exp().clamp_min(self.min_std_t).clamp_max(2.0).expand_as(mean)
         return Normal(mean, std), self.critic(obs).squeeze(-1)
 
     @torch.no_grad()
@@ -61,6 +65,11 @@ class ActorCritic(nn.Module):
     @torch.no_grad()
     def value(self, obs: torch.Tensor) -> torch.Tensor:
         return self.critic(obs).squeeze(-1)
+
+    def set_min_std(self, v: float):
+        """训练末段退火用: 同步 python 属性 (存档) 与 buffer (计算图输入)。"""
+        self.min_std = float(v)
+        self.min_std_t.fill_(float(v))
 
 
 class PPO:
@@ -180,5 +189,6 @@ class PPO:
     def load(cls, path: str, device: str = "cuda") -> "PPO":
         ckpt = torch.load(path, map_location=device, weights_only=False)
         agent = cls(ckpt["obs_dim"], ckpt["act_dim"], device=device)
-        agent.net.load_state_dict(ckpt["state_dict"])
+        # strict=False: 旧存档无 min_std_t buffer (v7 引入), 缺失时保留构造默认值
+        agent.net.load_state_dict(ckpt["state_dict"], strict=False)
         return agent

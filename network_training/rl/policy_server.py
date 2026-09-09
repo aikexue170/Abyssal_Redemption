@@ -188,7 +188,7 @@ def main():
 
     ckpt = torch.load(args.ckpt, map_location=args.device, weights_only=False)
     agent = PPO(ckpt["obs_dim"], ckpt["act_dim"], device=args.device)
-    agent.net.load_state_dict(ckpt["state_dict"])
+    agent.net.load_state_dict(ckpt["state_dict"], strict=False)  # 旧存档缺 min_std_t
     print(f"策略已加载: {args.ckpt} (obs={ckpt['obs_dim']}, act={ckpt['act_dim']})")
 
     s = SharedState()

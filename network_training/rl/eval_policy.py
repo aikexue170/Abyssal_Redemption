@@ -35,7 +35,7 @@ def main():
     ckpt = torch.load(args.ckpt, map_location=args.device, weights_only=False)
     stage = args.stage if args.stage is not None else int(ckpt.get("stage", 0))
     agent = PPO(ckpt["obs_dim"], ckpt["act_dim"], device=args.device)
-    agent.net.load_state_dict(ckpt["state_dict"])
+    agent.net.load_state_dict(ckpt["state_dict"], strict=False)  # 旧存档缺 min_std_t
 
     n = args.episodes
     env = NavEnv(num_envs=n, device=args.device, max_steps=600,

@@ -11,7 +11,7 @@ stage = int(sys.argv[2]) if len(sys.argv) > 2 else 3
 
 ckpt = torch.load(ckpt_path, map_location="cuda", weights_only=False)
 agent = PPO(ckpt["obs_dim"], ckpt["act_dim"], device="cuda")
-agent.net.load_state_dict(ckpt["state_dict"])
+agent.net.load_state_dict(ckpt["state_dict"], strict=False)  # 旧存档缺 min_std_t
 
 env = NavEnv(num_envs=4, device="cuda", randomize=0.0, seed=7)
 env.set_stage(**STAGES[stage])

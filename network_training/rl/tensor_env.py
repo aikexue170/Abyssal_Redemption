@@ -113,9 +113,10 @@ class NavEnv:
                  near_speed_weight: float = 0.002,      # 近场高速惩罚 (鼓励刹车剖面)
                  near_radius: float = 150.0,
                  time_penalty: float = 0.005,            # 每步时间惩罚 (v2 加大以追求速度)
-                 align_far_weight: float = 0.03,   # 远场船头指向目标点奖励 (cos psi)
-                 align_far_radius: float = 150.0,
-                 tail_penalty_weight: float = 0.02,  # 近场屁股对目标惩罚 (单边)
+                 align_weight: float = 0.08,     # v7: 船头指向目标点双向 cos 奖励,
+                 # 停泊区 (2R) 外全程生效 (v6 仅远场双向 + 近场单边罚, 近场斜行零成本)
+                 progress_gate_floor: float = 0.25,  # v7 方案A: 进展奖励方向门控地板,
+                 # 靠近目标时按 cos psi 打折 (原进展 shaping 方向盲, 是斜行的收益端)
                  seed: int = 0):
         self.N = num_envs
         self.device = torch.device(device)
@@ -129,9 +130,8 @@ class NavEnv:
         self.near_speed_weight = near_speed_weight
         self.near_radius = near_radius
         self.time_penalty = time_penalty
-        self.align_far_weight = align_far_weight
-        self.align_far_radius = align_far_radius
-        self.tail_penalty_weight = tail_penalty_weight
+        self.align_weight = align_weight
+        self.progress_gate_floor = progress_gate_floor
         self.g = torch.Generator(device=self.device)
         self.g.manual_seed(seed)
 
@@ -298,18 +298,25 @@ class NavEnv:
         rel, dist, dh = self._dist_dh()
         speed = self.vel.norm(dim=-1)
 
-        reward = 0.1 * (self.prev_dist - dist)          # 距离进展 shaping
-        reward -= self.time_penalty                    # 时间惩罚
+        progress = self.prev_dist - dist
+        reward = -self.time_penalty * torch.ones_like(dist)     # 时间惩罚
         reward -= self.spin_penalty * self.ang_vel.abs() / 20.0   # 角速度惩罚
 
         # 方向 shaping: cos(psi) = 船头与目标点连线夹角的余弦
         thr = torch.deg2rad(self.facing)
         cos_psi = (torch.cos(thr) * rel[:, 0] + torch.sin(thr) * rel[:, 1]) / dist
-        far = (dist > self.align_far_radius).float()
-        reward += self.align_far_weight * cos_psi * far            # 远场: 双向
-        mid = ((dist <= self.align_far_radius)
-               & (dist > self.arrival_radius * 2.0)).float()
-        reward += self.tail_penalty_weight * torch.clamp(cos_psi, max=0.0) * mid  # 近场: 单边罚
+        # v7: 双向 cos shaping 覆盖停泊区 (2R) 外全程 (原近场单边罚 min(cos,0)
+        # 在 psi<90° 半平面梯度为零, 最后 150su 斜行零成本; 双向项在 45° 仍有强梯度)
+        align_zone = (dist > self.arrival_radius * 2.0).float()
+        reward += self.align_weight * cos_psi * align_zone
+        # v7 方案A: 进展奖励方向门控 —— 靠近 (progress>0) 时按船头对齐度打折,
+        # 斜行接近不再拿全额进展奖励; 地板 0.25 保早期探索; 远离 (负进展) 不打折,
+        # 保留全额负反馈
+        pos_gate = self.progress_gate_floor + (
+            1.0 - self.progress_gate_floor) * torch.clamp(cos_psi, 0.0, 1.0)
+        gate = torch.where((progress > 0) & (align_zone > 0),
+                           pos_gate, torch.ones_like(pos_gate))
+        reward += 0.1 * progress * gate
 
         in_zone = dist < self.arrival_radius
         stopped = speed < self.stop_speed

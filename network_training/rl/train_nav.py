@@ -35,14 +35,22 @@ def parse_args():
     p.add_argument("--lr-final", type=float, default=1e-5,
                    help="训练结束时学习率 (全程线性衰减)")
     p.add_argument("--time-penalty", type=float, default=0.005)
-    p.add_argument("--align-far-weight", type=float, default=0.05)
-    p.add_argument("--tail-penalty-weight", type=float, default=0.02)
+    p.add_argument("--align-weight", type=float, default=0.08,
+                   help="停泊区(2R)外全程双向 cos 船头指向奖励权重")
+    p.add_argument("--progress-gate-floor", type=float, default=0.25,
+                   help="进展奖励方向门控地板 (靠近时按 cos psi 打折)")
     p.add_argument("--gamma", type=float, default=0.99)
     p.add_argument("--ent-coef", type=float, default=0.001)
     p.add_argument("--ent-decay", type=float, default=0.7,
                    help="每次课程晋级时熵系数乘以此衰减 (精密驻留需要策略收敛)")
     p.add_argument("--init-log-std", type=float, default=-0.3)
     p.add_argument("--min-std", type=float, default=0.12, help="策略标准差下限")
+    p.add_argument("--min-std-final", type=float, default=0.05,
+                   help="末段退火结束时的策略标准差下限 (低噪声精修)")
+    p.add_argument("--anneal-frac", type=float, default=0.15,
+                   help="训练末段退火占比: 期间 min_std->min_std_final, lr->lr_anneal_final 线性退火")
+    p.add_argument("--lr-anneal-final", type=float, default=2e-6,
+                   help="末段退火结束时的学习率")
     p.add_argument("--randomize", type=float, default=0.15, help="域随机化幅度")
     p.add_argument("--max-steps", type=int, default=600, help="单回合步数 (30s)")
     p.add_argument("--seed", type=int, default=0)
@@ -73,8 +81,8 @@ def main():
     env = NavEnv(num_envs=args.num_envs, device=args.device, dt=0.05,
                  max_steps=args.max_steps, randomize=args.randomize,
                  time_penalty=args.time_penalty,
-                 align_far_weight=args.align_far_weight,
-                 tail_penalty_weight=args.tail_penalty_weight, seed=args.seed)
+                 align_weight=args.align_weight,
+                 progress_gate_floor=args.progress_gate_floor, seed=args.seed)
     stage = args.start_stage
     env.set_stage(**STAGES[stage])
 
@@ -83,7 +91,8 @@ def main():
                 init_log_std=args.init_log_std, min_std=args.min_std, seed=args.seed)
     if args.resume:
         ckpt = torch.load(args.resume, map_location=args.device, weights_only=False)
-        agent.net.load_state_dict(ckpt["state_dict"])
+        # strict=False: 旧存档可能缺 min_std_t buffer
+        agent.net.load_state_dict(ckpt["state_dict"], strict=False)
         print(f"[resume] {args.resume}")
     agent.init_buffer(args.num_steps, args.num_envs, OBS_DIM, ACT_DIM)
 
@@ -125,9 +134,21 @@ def main():
     global_steps = 0
     print(f"run={run_name} envs={args.num_envs} steps/iter={args.num_steps} "
           f"batch={args.num_envs * args.num_steps} device={args.device}")
+    anneal_start = int(args.iters * (1.0 - args.anneal_frac))
+    if args.anneal_frac > 0:
+        print(f"[anneal] 末 {args.iters - anneal_start} 轮退火: "
+              f"min_std {args.min_std}->{args.min_std_final}, "
+              f"lr ->{args.lr_anneal_final:.2g}")
     for it in range(1, args.iters + 1):
-        # 学习率线性衰减
+        # 学习率线性衰减; 末段退火: min_std 与 lr 进一步线性压到终值 (低噪声精修)
         lr_now = args.lr + (args.lr_final - args.lr) * (it - 1) / max(args.iters - 1, 1)
+        min_std_now = args.min_std
+        if it > anneal_start:
+            f = (it - anneal_start) / max(args.iters - anneal_start, 1)
+            lr_base = args.lr + (args.lr_final - args.lr) * (anneal_start - 1) / max(args.iters - 1, 1)
+            lr_now = lr_base + (args.lr_anneal_final - lr_base) * f
+            min_std_now = args.min_std + (args.min_std_final - args.min_std) * f
+        agent.net.set_min_std(min_std_now)
         for g in agent.opt.param_groups:
             g["lr"] = lr_now
         for t in range(args.num_steps):
@@ -187,7 +208,8 @@ def main():
         print(f"iter {it:4d} | stage {stage} | ret {mean_ret:8.2f} | "
               f"succ {succ_rate:5.1%} | dist {mean_dist:7.1f} | "
               f"kl {stats['kl']:.4f} | ent {stats['ent']:.3f} | "
-              f"vf {stats['vf']:.4f} | lr {lr_now:.2e} | SPS {sps}", flush=True)
+              f"vf {stats['vf']:.4f} | lr {lr_now:.2e} | "
+              f"std {min_std_now:.3f} | SPS {sps}", flush=True)
 
         # 课程晋级
         if (stage < len(STAGES) - 1 and succ_rate > args.advance_threshold
