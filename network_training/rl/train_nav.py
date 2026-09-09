@@ -35,13 +35,14 @@ def parse_args():
     p.add_argument("--lr-final", type=float, default=1e-5,
                    help="训练结束时学习率 (全程线性衰减)")
     p.add_argument("--time-penalty", type=float, default=0.005)
-    p.add_argument("--align-far-weight", type=float, default=0.03)
+    p.add_argument("--align-far-weight", type=float, default=0.05)
     p.add_argument("--tail-penalty-weight", type=float, default=0.02)
     p.add_argument("--gamma", type=float, default=0.99)
     p.add_argument("--ent-coef", type=float, default=0.001)
     p.add_argument("--ent-decay", type=float, default=0.7,
                    help="每次课程晋级时熵系数乘以此衰减 (精密驻留需要策略收敛)")
     p.add_argument("--init-log-std", type=float, default=-0.3)
+    p.add_argument("--min-std", type=float, default=0.12, help="策略标准差下限")
     p.add_argument("--randomize", type=float, default=0.15, help="域随机化幅度")
     p.add_argument("--max-steps", type=int, default=600, help="单回合步数 (30s)")
     p.add_argument("--seed", type=int, default=0)
@@ -75,7 +76,7 @@ def main():
 
     agent = PPO(OBS_DIM, ACT_DIM, device=args.device, lr=args.lr,
                 gamma=args.gamma, ent_coef=args.ent_coef,
-                init_log_std=args.init_log_std, seed=args.seed)
+                init_log_std=args.init_log_std, min_std=args.min_std, seed=args.seed)
     if args.resume:
         ckpt = torch.load(args.resume, map_location=args.device, weights_only=False)
         agent.net.load_state_dict(ckpt["state_dict"])

@@ -29,8 +29,9 @@ def _mlp(sizes, act=nn.Tanh):
 
 class ActorCritic(nn.Module):
     def __init__(self, obs_dim: int, act_dim: int, hidden: int = 128,
-                 init_log_std: float = -0.5):
+                 init_log_std: float = -0.5, min_std: float = 0.1):
         super().__init__()
+        self.min_std = min_std   # 标准差下限: 防探索崩溃 (历史教训: 熵崩后高 lr 打崩策略)
         self.actor = nn.Sequential(*_mlp([obs_dim, hidden, hidden, act_dim]))
         self.critic = nn.Sequential(*_mlp([obs_dim, hidden, hidden, 1]))
         self.log_std = nn.Parameter(torch.full((act_dim,), init_log_std))
@@ -44,7 +45,7 @@ class ActorCritic(nn.Module):
 
     def forward(self, obs: torch.Tensor):
         mean = self.actor(obs)
-        std = self.log_std.exp().clamp(1e-3, 2.0).expand_as(mean)
+        std = self.log_std.exp().clamp(self.min_std, 2.0).expand_as(mean)
         return Normal(mean, std), self.critic(obs).squeeze(-1)
 
     @torch.no_grad()
@@ -69,10 +70,10 @@ class PPO:
                  clip_coef: float = 0.2, vf_coef: float = 0.5,
                  ent_coef: float = 0.0, max_grad_norm: float = 1.0,
                  update_epochs: int = 4, num_minibatches: int = 8,
-                 init_log_std: float = -0.5, seed: int = 0):
+                 init_log_std: float = -0.5, min_std: float = 0.1, seed: int = 0):
         torch.manual_seed(seed)
         self.device = torch.device(device)
-        self.net = ActorCritic(obs_dim, act_dim, hidden, init_log_std).to(self.device)
+        self.net = ActorCritic(obs_dim, act_dim, hidden, init_log_std, min_std).to(self.device)
         self.opt = torch.optim.Adam(self.net.parameters(), lr=lr)
         self.gamma, self.gae_lambda = gamma, gae_lambda
         self.clip_coef, self.vf_coef, self.ent_coef = clip_coef, vf_coef, ent_coef
@@ -169,7 +170,8 @@ class PPO:
     def save(self, path: str, extra: dict | None = None):
         payload = dict(state_dict=self.net.state_dict(),
                        obs_dim=self.net.actor[0].in_features,
-                       act_dim=self.net.log_std.numel())
+                       act_dim=self.net.log_std.numel(),
+                       min_std=self.net.min_std)
         if extra:
             payload.update(extra)
         torch.save(payload, path)
